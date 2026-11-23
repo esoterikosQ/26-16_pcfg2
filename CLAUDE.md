@@ -66,9 +66,11 @@
 ## 개발 명령 (itcerdo, 저장소 루트, `.venv` 활성화 상태)
 
 ```bash
-python setup.py build_ext --inplace     # C++ 엔진(pcfg/_ckycpp) 빌드
-pytest -q                               # 전체 (영어 통합 테스트는 NLTK_DATA 필요)
+python setup.py build_ext --inplace     # C++ 엔진(pcfg/_ckycpp) 빌드 (C++ 소스 수정·git pull 후 매번)
+pytest -q                               # 전체 (영어 통합 테스트는 NLTK_DATA 필요, 약 40초)
 pytest tests/test_cky.py                # 엔진 골든 넘버 (Python·C++ 모두)
+pytest tests/test_cky_cpp.py            # C++ ↔ Python 엔진 동치 (트리·로그확률 비트 단위)
+python -m scripts.bench_cky             # 문장 길이별 두 엔진 속도 비교 (수십 분, tmux에서)
 ```
 
 ## 흔한 함정
