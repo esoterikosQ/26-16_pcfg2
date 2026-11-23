@@ -24,3 +24,20 @@ gh repo view esoterikosQ/26-16_pcfg2 --json visibility,isEmpty
 
 - 결과: itcerdo 24코어·RAM 60GB·Python 3.12.3·g++ 13.3·cmake 3.28·tmux·git 있음, uv 없음. GitHub 저장소는 비어 있고 **public** → 데이터·`papers/`·말뭉치 문장이 든 `outputs/`는 `.gitignore`로 제외.
 - 제약: `phdq_pcfg`, `phdq_noisy`, `phdq_bart2`는 수정 금지(읽기 전용 참조).
+
+### 08:06–08:12 · K0 저장소 초기화·itcerdo 환경 구성 [gsm, itcerdo]
+
+- 작업: gsm에서 git 초기화 후 `esoterikosQ/26-16_pcfg2`에 push. itcerdo에 `~/projects/phdq_pcfg2` 생성·clone, `.venv` 구성(캐시·NLTK 데이터를 저장소 안으로 고정), 기존 테스트 실행.
+
+```bash
+# [gsm]
+git init -b main && git add -A && git commit && git push -u origin main      # 62ae14a
+# [itcerdo]
+mkdir -p ~/projects/phdq_pcfg2 && cd ~/projects/phdq_pcfg2 && git clone https://github.com/esoterikosQ/26-16_pcfg2.git .
+python3 -m venv .venv    # activate 끝에 PIP_CACHE_DIR·XDG_CACHE_HOME·MPLCONFIGDIR·NLTK_DATA 를 저장소 안으로 지정
+pip install -r requirements.txt
+python -c "import nltk, os; nltk.download('treebank', download_dir=os.environ['NLTK_DATA'])"
+pytest -q
+```
+
+- 결과: **33 passed (1.32s)**. Python 3.12.3, pybind11 3.1.0. NLTK treebank는 `nltk_data/corpora/treebank`에 받아짐. NLTK가 "상위 디렉토리가 그룹 쓰기 가능(umask 0002)" 경고를 냈으나 저장 위치는 저장소 안이며 지정 디렉토리 밖에는 쓰지 않음. → **K0 완료.**
