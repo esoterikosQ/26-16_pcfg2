@@ -34,10 +34,14 @@ class PCFG:
 
         self.nonterminals: set[str] = set()
 
+        # 개정 번호: add() 때마다 증가. C++ 엔진(cky_cpp)의 컴파일 캐시 무효화 키.
+        self._rev = 0
+
     # ------------------------------------------------------------------
     # 규칙 추가
     # ------------------------------------------------------------------
     def add(self, lhs: str, rhs, prob: float, lexical: bool = False) -> None:
+        self._rev += 1
         rhs = tuple(rhs)
         key = (lhs, rhs)
         self.prob[key] = prob

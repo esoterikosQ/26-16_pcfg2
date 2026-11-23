@@ -197,15 +197,23 @@ def right_branching_fallback(words: List[str], label: str = "S",
     return Tree(label, [first, rest])
 
 
-def parse_sentence(words: List[str], induced: InducedGrammar) -> Tuple[Tree, bool]:
+def parse_sentence(words: List[str], induced: InducedGrammar,
+                   engine: str = "py") -> Tuple[Tree, bool]:
     """문장을 파싱해 (원본 n-항 트리, 폴백여부) 반환.
 
     - OOV 단어는 <UNK>로 백오프.
     - 파스 성공 시 CNF 역변환 + TOP 제거.
     - 실패 시 우분지 폴백.
+    - engine: "py"(참조 구현 pcfg.cky) | "cpp"(C++ 엔진 pcfg.cky_cpp, 결과 동일).
     """
     mapped = _map_unknowns(words, induced.vocab)
-    result = parse(mapped, induced.grammar)
+    if engine == "py":
+        result = parse(mapped, induced.grammar)
+    elif engine == "cpp":
+        from .cky_cpp import parse as parse_cpp
+        result = parse_cpp(mapped, induced.grammar)
+    else:
+        raise ValueError(f"unknown engine: {engine!r} (expected 'py' or 'cpp')")
     if result.tree is None:
         return right_branching_fallback(list(words)), True
 
