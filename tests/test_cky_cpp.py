@@ -138,10 +138,10 @@ def _random_grammar(rng: random.Random):
 def test_random_grammars_full_chart_equivalence():
     rng = random.Random(20261124)
     n_parsed = 0
-    for _ in range(300):
+    for _ in range(1000):
         g, vocab = _random_grammar(rng)
         for _ in range(5):
-            words = [rng.choice(vocab) for _ in range(rng.randint(0, 8))]
+            words = [rng.choice(vocab) for _ in range(rng.randint(0, 10))]
             rp, rc = cky.parse(words, g), cky_cpp.parse(words, g)
             _assert_same_result(rp, rc)
             _assert_same_chart(rp, rc, len(words))
@@ -172,7 +172,7 @@ def test_parse_sentence_engine_switch():
 # ---------------------------------------------------------------------------
 TRAIN_MAX_LEN = 25     # 학습: 전처리 후 길이 <= 25 인 문장의 앞 1000개
 N_TRAIN = 1000
-HELDOUT_MAX_LEN = 25   # 평가: 그 뒤 문장 중 길이 <= HELDOUT_MAX_LEN
+HELDOUT_MAX_LEN = 18   # 평가: 그 뒤 문장 중 길이 <= 18 (Python 엔진 시간 때문에 제한, 약 40초)
 N_HELDOUT = 200
 N_FULL_CHART = 20      # 그중 앞 N_FULL_CHART 문장은 셀 전체까지 비교
 

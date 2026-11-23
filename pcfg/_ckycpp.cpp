@@ -14,6 +14,8 @@
 //
 // 메모리: 셀은 희소(실제로 존재하는 라벨만 담는 벡터 + 라벨 정렬 인덱스). 셀을 채우는 동안만
 // 비단말 수 크기의 조밀한 위치 배열(scratch)을 쓴다.
+// 속도: 규칙이 없는 (B, C) 조합은 Python에서도 아무 일도 하지 않으므로 건너뛴다. 규칙이 있는
+// C만 오른쪽 셀 삽입 순서대로 열거하므로(Parser::combine) relax 호출열은 Python과 같다.
 
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -148,6 +150,22 @@ public:
                 has_right_[bin_c_[p]] = 1;
             }
         }
+
+        // 왼쪽 자식 B → 짝 (C, 쌍 번호) 목록 (규칙이 있는 쌍만). 목록 순서는 의미 없음:
+        // 파서가 오른쪽 셀 삽입 순서로 다시 정렬한다.
+        part_off_.assign(static_cast<size_t>(n_labels_) + 1, 0);
+        for (size_t p = 0; p < n_pairs; ++p)
+            if (bin_off_[p] != bin_off_[p + 1]) ++part_off_[bin_b_[p] + 1];
+        for (int32_t a = 0; a < n_labels_; ++a) part_off_[a + 1] += part_off_[a];
+        part_c_.resize(static_cast<size_t>(part_off_.back()));
+        part_pair_.resize(static_cast<size_t>(part_off_.back()));
+        std::vector<int32_t> fill(part_off_.begin(), part_off_.end() - 1);
+        for (size_t p = 0; p < n_pairs; ++p) {
+            if (bin_off_[p] == bin_off_[p + 1]) continue;
+            const int32_t q = fill[bin_b_[p]]++;
+            part_c_[q] = bin_c_[p];
+            part_pair_[q] = static_cast<int32_t>(p);
+        }
     }
 
     int32_t n_labels() const { return n_labels_; }
@@ -177,6 +195,7 @@ public:
     std::vector<int32_t> bin_b_, bin_c_, bin_off_, bin_lhs_;
     std::vector<double> bin_lp_;
     std::vector<uint8_t> has_unary_, has_left_, has_right_;
+    std::vector<int32_t> part_off_, part_c_, part_pair_;
 
 private:
     static constexpr uint64_t EMPTY = ~0ULL;  // 라벨 id < 2^31 이므로 실제 키와 겹치지 않음
@@ -268,7 +287,8 @@ private:
 class Parser {
 public:
     Parser(const Grammar& g, Chart& chart)
-        : g_(g), chart_(chart), pos_(static_cast<size_t>(g.n_labels()), -1) {}
+        : g_(g), chart_(chart), pos_(static_cast<size_t>(g.n_labels()), -1),
+          rpos_(static_cast<size_t>(g.n_labels()), -1) {}
 
     void run(const std::vector<int32_t>& words) {
         const int32_t n = chart_.n();
@@ -295,24 +315,15 @@ public:
                     const std::vector<Entry>& right = chart_.at(k, j).entries;
                     if (left.empty() || right.empty()) continue;
                     // 오른쪽 자식이 될 수 없는 라벨은 갱신을 일으키지 않으므로 순서를 지켜 걸러 둔다.
+                    // rpos_[C] = 걸러진 오른쪽 목록에서 C의 위치 (= 삽입 순서상의 순위).
                     rfilt_.clear();
-                    for (const Entry& y : right)
-                        if (g_.has_right_[y.label]) rfilt_.emplace_back(y.label, y.lp);
-                    if (rfilt_.empty()) continue;
-                    for (const Entry& x : left) {
-                        if (!g_.has_left_[x.label]) continue;
-                        const int32_t B = x.label;
-                        const double lp_b = x.lp;
-                        for (const auto& rc : rfilt_) {
-                            const int32_t p = g_.find_pair(B, rc.first);
-                            if (p < 0) continue;
-                            const double lp_c = rc.second;
-                            for (int32_t r = g_.bin_off_[p]; r < g_.bin_off_[p + 1]; ++r) {
-                                const double cand = (g_.bin_lp_[r] + lp_b) + lp_c;
-                                relax(cell.entries, g_.bin_lhs_[r], cand, k, B, rc.first);
-                            }
-                        }
+                    for (const Entry& y : right) {
+                        if (!g_.has_right_[y.label]) continue;
+                        rpos_[y.label] = static_cast<int32_t>(rfilt_.size());
+                        rfilt_.emplace_back(y.label, y.lp);
                     }
+                    if (!rfilt_.empty()) combine(cell.entries, left, k);
+                    for (const auto& rc : rfilt_) rpos_[rc.first] = -1;
                 }
                 // 단항 규칙 처리 (일반화 CKY): 이항 조합 뒤 단항 클로저 적용.
                 unary_closure(cell.entries);
@@ -322,6 +333,47 @@ public:
     }
 
 private:
+    // 분할점 k에서 왼쪽 셀 × (걸러진) 오른쪽 셀 조합. Python 순서와 같은 relax 호출열을 만든다:
+    //   for (B, lp_b) in left: for (C, lp_c) in right: for (A, lp_rule) in binary_parents(B, C)
+    // B마다 두 방법 중 싼 쪽으로 "규칙이 있는 C"를 오른쪽 셀 삽입 순서대로 열거한다.
+    //   (a) B의 짝 목록이 짧으면: 짝 C 중 오른쪽 셀에 있는 것만 모아 rpos 순으로 정렬
+    //   (b) 아니면: 오른쪽 셀을 순서대로 돌며 (B, C) 해시 조회
+    // 규칙이 없는 (B, C)는 Python에서도 아무 일도 하지 않으므로 건너뛰어도 결과가 같다.
+    void combine(std::vector<Entry>& out, const std::vector<Entry>& left, int32_t k) {
+        const int32_t n_right = static_cast<int32_t>(rfilt_.size());
+        for (const Entry& x : left) {
+            if (!g_.has_left_[x.label]) continue;
+            const int32_t B = x.label;
+            const double lp_b = x.lp;
+            const int32_t q0 = g_.part_off_[B], q1 = g_.part_off_[B + 1];
+            if (q1 - q0 <= n_right) {
+                matches_.clear();
+                for (int32_t q = q0; q < q1; ++q) {
+                    const int32_t r = rpos_[g_.part_c_[q]];
+                    if (r >= 0) matches_.emplace_back(r, g_.part_pair_[q]);
+                }
+                if (matches_.size() > 1) std::sort(matches_.begin(), matches_.end());
+                for (const auto& mp : matches_) {
+                    const auto& rc = rfilt_[mp.first];
+                    emit(out, mp.second, k, B, lp_b, rc.first, rc.second);
+                }
+            } else {
+                for (const auto& rc : rfilt_) {
+                    const int32_t p = g_.find_pair(B, rc.first);
+                    if (p >= 0) emit(out, p, k, B, lp_b, rc.first, rc.second);
+                }
+            }
+        }
+    }
+
+    void emit(std::vector<Entry>& out, int32_t p, int32_t k, int32_t B, double lp_b, int32_t C,
+              double lp_c) {
+        for (int32_t r = g_.bin_off_[p]; r < g_.bin_off_[p + 1]; ++r) {
+            const double cand = (g_.bin_lp_[r] + lp_b) + lp_c;  // math.log(p) + lp_b + lp_c
+            relax(out, g_.bin_lhs_[r], cand, k, B, C);
+        }
+    }
+
     // Python: if cand > cell.get(A, NEG_INF): cell[A] = cand; back[A] = ...
     bool relax(std::vector<Entry>& e, int32_t a, double cand, int32_t k, int32_t b, int32_t c) {
         const int32_t p = pos_[a];
@@ -366,9 +418,11 @@ private:
 
     const Grammar& g_;
     Chart& chart_;
-    std::vector<int32_t> pos_;  // scratch: 라벨 → 채우는 중인 셀의 entries 인덱스 (-1 = 없음)
+    std::vector<int32_t> pos_;   // scratch: 라벨 → 채우는 중인 셀의 entries 인덱스 (-1 = 없음)
+    std::vector<int32_t> rpos_;  // scratch: 라벨 → 현재 오른쪽 셀(걸러진 목록)의 위치 (-1 = 없음)
     std::vector<std::pair<int32_t, double>> snap_;
     std::vector<std::pair<int32_t, double>> rfilt_;
+    std::vector<std::pair<int32_t, int32_t>> matches_;  // (오른쪽 위치, 쌍 번호)
 };
 
 inline std::unique_ptr<Chart> parse_ids(const Grammar& g, const std::vector<int32_t>& words) {
