@@ -1,0 +1,5 @@
+nltk
+pytest
+pybind11>=2.12
+setuptools
+matplotlib

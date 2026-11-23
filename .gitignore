@@ -1,0 +1,30 @@
+# 공개 저장소: 라이선스 데이터·파생 출력·저작권 PDF는 절대 올리지 않는다.
+
+# 원자료 (세종 구문분석 말뭉치 등 — 국립국어원 재배포 금지)
+data/
+# 파싱 출력 (말뭉치 문장 포함 → 파생 데이터). 수치 요약은 RESULT.md / log.md 에 적는다.
+outputs/
+# 저작권 있는 교재 발췌 PDF
+papers/
+# NLTK 데이터 (영어 회귀 테스트용, NLTK_DATA 로 저장소 안에 받음)
+nltk_data/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# C++ 확장 빌드 산출물
+build/
+*.so
+*.o
+
+# 가상환경·캐시
+.venv/
+venv/
+.cache/
+
+# OS
+.DS_Store
