@@ -86,6 +86,29 @@ def relabel_tree(tree: Tree, relabel) -> Tree:
 
 
 # ---------------------------------------------------------------------------
+# 부모 주석 (K4-3, Klein & Manning 2003의 v=2)
+# ---------------------------------------------------------------------------
+PARENT_SEP = "^"
+
+
+def annotate_parent(tree: Tree, parent: Optional[str] = None) -> Tree:
+    """구 노드 라벨에 부모 라벨을 붙인다(``NP_SBJ`` → ``NP_SBJ^VP``). 전종단과 루트는 그대로."""
+    if tree.is_preterminal():
+        return Tree(tree.label, [tree.children[0]])
+    label = tree.label if parent is None else f"{tree.label}{PARENT_SEP}{parent}"
+    return Tree(label, [annotate_parent(c, tree.label) for c in tree.children])
+
+
+def preprocess_parent(tree: Tree) -> Tree:
+    """기능 표지 유지 + 부모 주석."""
+    return annotate_parent(preprocess_keep(tree))
+
+
+def strip_parent(label: str) -> str:
+    return label.split(PARENT_SEP, 1)[0]
+
+
+# ---------------------------------------------------------------------------
 # 어절 경계 표시 (K4-1)
 # ---------------------------------------------------------------------------
 EOJEOL_MARK = "▁"
