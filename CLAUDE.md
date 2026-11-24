@@ -4,7 +4,7 @@
 
 ## 프로젝트 개요
 
-영어 Penn Treebank로 검증을 끝낸 **PCFG 구구조 파서**(`26-00_pcfg`, 결과는 `RESULT.md`)를 **한국어(세종 구문분석 말뭉치)** 로 확장한다.
+영어 Penn Treebank로 검증을 끝낸 **PCFG 구구조 파서**(`26-00_pcfg`, 결과는 `RESULT.md`)를 **한국어(모두의 말뭉치 구문 분석 말뭉치를 구구조로 변환)** 로 확장한다.
 최종 용도는 상위 연구(`phdq_prob`, 한국어 GEC 계층적 잡음 채널 모형)의 사전확률 항 $\log P_{\text{PCFG}}(t^*(y))$ 이다. 즉 교정 후보의 **형태소열**을 받아 비터비 파스의 로그확률을 돌려주는 채점기가 최종 산출물이다.
 
 - 근거 문헌: Jurafsky & Martin *SLP* App. E, Manning & Schütze *FSNLP* Ch. 11, Klein & Manning (2003).
@@ -12,7 +12,8 @@
 
 ## 확정된 결정 (2026-11-24)
 
-- **말단 단위 = 형태소.** 세종 트리의 어절 리프(`학교/NNG + 가/JKS`)를 형태소 전종단으로 펼친다. 파서 입력·골드 트리·HNC 후보의 단위를 형태소로 일치시킨다.
+- **트리뱅크 = 모두의 말뭉치 구문 분석(DP) 2020 v2.0·2024·2025를 구구조로 변환** (2026-11-24, 사용자 제공). 의존 구조지만 라벨이 세종 구구조 표지(`NP_SBJ` 등)이고 지배소가 100% 오른쪽, 비투사 문장이 0.1% 미만이라, 지배소가 자기 라벨로 투사하며 가까운 의존소부터 하나씩 묶는 이진 구조로 결정적으로 바꾼다(`pcfg/korean.py`). 세종 구문분석 말뭉치는 확보되면 비교용으로 쓴다.
+- **말단 단위 = 형태소.** DP에는 형태소 분석이 없으므로 Kiwi로 분석해 어절에 배정하고, 어절 노드 아래에 형태소 전종단을 평평하게 둔다. 말단 = `형태/품사`, 전종단 = `#품사`(Kiwi 품사 `NP`와 구 표지 `NP` 충돌 방지), 미등록 형태소는 품사별 UNK(`<UNK/NNG>`).
 - **형태소 분석기·태그셋은 상위 연구와 공유한다**: Kiwi(세종 계열 태그). 세종 태그와 Kiwi 태그의 차이는 변환 표 하나로 관리한다.
 - **CKY 코어는 C++(pybind11)로 이식한다.** Python `pcfg/cky.py`는 참조 구현으로 남긴다. C++ 엔진은 Python 엔진과 **같은 순회 순서·같은 동점 처리**를 지켜, 같은 입력에서 같은 트리·같은 로그확률을 내야 한다.
 
@@ -21,7 +22,7 @@
 - **gsm(로컬)**: 코드·문서 편집, git commit/push, `log.md` 기록만 한다. **gsm에서 빌드·테스트·데이터 처리를 하지 않는다.**
 - **itcerdo**: `~/projects/phdq_pcfg2` 안에서만 작업한다(이 디렉토리 밖 접근 금지). 실행은 저장소 루트에서 `source .venv/bin/activate` 후 한다. sudo는 쓰지 않는다. 장시간 작업은 tmux에서 돌리고 끝나면 세션을 닫는다.
 - **코드 이동은 GitHub(`esoterikosQ/26-16_pcfg2`, public)로만**: gsm에서 push → itcerdo에서 `git pull`. itcerdo에서 추적 파일을 직접 고치지 않는다.
-- **데이터는 GitHub에 올리지 않는다**(공개 저장소, 국립국어원 재배포 금지). 세종 말뭉치는 itcerdo의 `data/`에 사용자가 두거나 gsm에서 scp로 옮긴다. 말뭉치 문장이 들어간 파싱 출력은 `outputs/`(git 제외)에 두고, 수치만 문서에 적는다.
+- **데이터는 GitHub에 올리지 않는다**(공개 저장소, 국립국어원 재배포 금지). 원자료는 itcerdo `data/`(DP zip 원본은 `data/raw/`, 압축 해제본은 `data/NIKL_DP_*`), 변환 트리뱅크는 `data/treebank/`, 말뭉치 문장이 들어간 파싱 출력은 `outputs/`(모두 git 제외). 문서에는 수치만 적는다.
 - 캐시(pip, NLTK)는 저장소 안(`.cache/`, `nltk_data/`)에 고정한다.
 - **읽기 전용 참조 디렉토리**: `phdq_pcfg`, `phdq_noisy`, `phdq_bart2`는 절대 수정하지 않는다.
 
@@ -43,7 +44,7 @@
 
 ## 절대 잊지 말 것 (도메인 핵심)
 
-- **구구조(constituency) 파싱**이다. 의존 파싱이 아니다. 의존 트리뱅크(UD, 모두의 말뭉치 구문분석 말뭉치)는 쓰지 않는다.
+- **구구조(constituency) 파싱**이다. 의존 파싱이 아니다. 의존 트리뱅크는 **구구조로 결정적으로 변환할 수 있을 때만**(세종식 구 표지 라벨, 핵어말, 투사적) 변환해 쓴다. UD는 쓰지 않는다.
 - **학습은 트리뱅크 지도 학습(규칙 카운팅)**. Inside-Outside EM, Inside, Outside 알고리즘은 구현하지 않는다. 파싱에 필요한 것은 CKY/Viterbi(max + 백포인터)뿐이다.
 - 알고리즘은 언어 독립적이다. 한국어 작업은 데이터 계층(로더·말단 단위·라벨 체계·UNK)과 성능(C++) 문제다.
 
@@ -67,6 +68,8 @@
 
 ```bash
 python setup.py build_ext --inplace     # C++ 엔진(pcfg/_ckycpp) 빌드 (C++ 소스 수정·git pull 후 매번)
+python -m scripts.build_dp_treebank     # data/NIKL_DP_* → data/treebank/{train,dev,test}.trees (약 1분)
+python -m scripts.eval_korean --dev-n 0 --workers 12 --tag <이름>   # 한국어 유도 + dev PARSEVAL (tmux에서)
 pytest -q                               # 전체 (영어 통합 테스트는 NLTK_DATA 필요, 약 40초)
 pytest tests/test_cky.py                # 엔진 골든 넘버 (Python·C++ 모두)
 pytest tests/test_cky_cpp.py            # C++ ↔ Python 엔진 동치 (트리·로그확률 비트 단위)

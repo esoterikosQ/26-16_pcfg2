@@ -86,6 +86,34 @@ def relabel_tree(tree: Tree, relabel) -> Tree:
 
 
 # ---------------------------------------------------------------------------
+# 어절 경계 표시 (K4-1)
+# ---------------------------------------------------------------------------
+EOJEOL_MARK = "▁"
+
+
+def mark_eojeol_boundaries(tree: Tree) -> Tree:
+    """어절 첫 형태소의 말단 앞에 ``▁``를 붙인 사본.
+
+    변환 트리에서 어절 노드 = 자식이 모두 전종단인 노드다(투사 노드는 구 자식을 가짐).
+    HNC 후보는 띄어쓰기가 정해져 있으므로(형태소의 ``space_before``) 파서 입력에 어절 경계를
+    주는 것은 정당하다.
+    """
+    if tree.is_preterminal():
+        return Tree(tree.label, [tree.children[0]])
+    kids = [mark_eojeol_boundaries(c) for c in tree.children]
+    if all(isinstance(c, Tree) and c.is_preterminal() for c in tree.children):
+        first = kids[0]
+        kids[0] = Tree(first.label, [EOJEOL_MARK + first.children[0]])
+    return Tree(tree.label, kids)
+
+
+def unk_by_tag_eojeol(term: str) -> str:
+    """품사별 UNK + 어절 첫 형태소 여부 (``<UNK▁/NNG>``)."""
+    mark = EOJEOL_MARK if term.startswith(EOJEOL_MARK) else ""
+    return f"<UNK{mark}/{tag_of(term)}>"
+
+
+# ---------------------------------------------------------------------------
 # DP 문장
 # ---------------------------------------------------------------------------
 @dataclass

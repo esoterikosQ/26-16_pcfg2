@@ -23,7 +23,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from pcfg.eval import evaluate_corpus  # noqa: E402
 from pcfg.induce import induce_pcfg, parse_sentence  # noqa: E402
 from pcfg.korean import (  # noqa: E402
-    preprocess_keep, preprocess_strip, relabel_tree, strip_function_tag, unk_by_tag,
+    mark_eojeol_boundaries, preprocess_keep, preprocess_strip, relabel_tree, strip_function_tag,
+    unk_by_tag, unk_by_tag_eojeol,
 )
 from pcfg.tree import from_bracket, to_bracket  # noqa: E402
 
@@ -61,6 +62,7 @@ def main() -> None:
     ap.add_argument("--split", default="dev")
     ap.add_argument("--max-len", type=int, default=0, help="평가 문장 최대 형태소 수(0=제한 없음)")
     ap.add_argument("--strip-ftags", action="store_true", help="기능 표지를 지우고 학습")
+    ap.add_argument("--mark-eojeol", action="store_true", help="어절 첫 형태소에 ▁ 표시(K4-1)")
     ap.add_argument("--unk-threshold", type=int, default=1)
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--seed", type=int, default=0)
@@ -70,11 +72,14 @@ def main() -> None:
     out.mkdir(parents=True, exist_ok=True)
     prep = preprocess_strip if args.strip_ftags else preprocess_keep
 
+    unk_fn = unk_by_tag_eojeol if args.mark_eojeol else unk_by_tag
     t0 = time.time()
     train = _read(args.treebank / "train.trees", args.max_train, args.seed)
+    if args.mark_eojeol:
+        train = [mark_eojeol_boundaries(t) for t in train]
     t_read = time.time() - t0
     t0 = time.time()
-    _IND = induce_pcfg(train, unk_threshold=args.unk_threshold, preprocess_fn=prep, unk_fn=unk_by_tag)
+    _IND = induce_pcfg(train, unk_threshold=args.unk_threshold, preprocess_fn=prep, unk_fn=unk_fn)
     t_induce = time.time() - t0
     g = _IND.grammar
     n_lex = sum(len(v) for v in g._lexical_by_word.values())
@@ -87,6 +92,8 @@ def main() -> None:
     del train
 
     dev = _read(args.treebank / f"{args.split}.trees", 0, args.seed)
+    if args.mark_eojeol:
+        dev = [mark_eojeol_boundaries(t) for t in dev]
     if args.max_len:
         dev = [t for t in dev if len(t.leaves()) <= args.max_len]
     rng = random.Random(args.seed + 1)
@@ -118,6 +125,7 @@ def main() -> None:
 
     summary = {
         "tag": args.tag, "split": args.split, "eval_sents": len(golds), "strip_ftags": args.strip_ftags,
+        "mark_eojeol": args.mark_eojeol,
         "unk_threshold": args.unk_threshold, "fallbacks": fallbacks,
         "parseval_labeled": prf(full), "parseval_no_ftag": prf(noft), "parseval_unlabeled": prf(unl),
         "parse_wall_sec": round(wall, 1), "workers": args.workers,

@@ -93,3 +93,11 @@ def test_induce_and_parse_with_tag_unk(engine):
     tree, fallback = parse_sentence(gold.leaves(), ind, engine=engine)
     assert not fallback
     assert tree == gold
+
+
+def test_mark_eojeol_boundaries():
+    from pcfg.korean import mark_eojeol_boundaries, unk_by_tag_eojeol
+    t = dp_to_tree([3, 3, 0], ["NP_SBJ", "NP_OBJ", "VP"], [M_SUBJ, M_OBJ, M_PRED])
+    m = mark_eojeol_boundaries(t)
+    assert m.leaves() == ["▁나/NP", "는/JX", "▁사과/NNG", "를/JKO", "▁먹/VV", "었/EP", "다/EF"]
+    assert unk_by_tag_eojeol("▁사과/NNG") == "<UNK▁/NNG>" and unk_by_tag_eojeol("를/JKO") == "<UNK/JKO>"
