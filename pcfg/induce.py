@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from typing import List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 from .cky import parse
 from .grammar import PCFG
@@ -25,6 +25,11 @@ from .tree import Tree
 UNK = "<UNK>"
 TOP = "TOP"
 MARKER = "|"
+
+
+def default_unk(word: str) -> str:
+    """미등록어 → 단일 `<UNK>` (영어 기준선). 한국어는 `pcfg.korean.unk_by_tag`."""
+    return UNK
 
 
 # ---------------------------------------------------------------------------
@@ -121,13 +126,19 @@ def _word_counts(trees: List[Tree]) -> Counter:
 
 
 def _collect_rules(tree: Tree, vocab: set, counts_lhs: Counter,
-                   counts_rule: Counter) -> None:
-    """이항화된 트리에서 규칙을 카운팅. 희귀어(vocab 밖)는 UNK로 치환."""
+                   counts_rule: Counter, unk_fn: Callable[[str], str] = default_unk,
+                   unk_tokens: Optional[set] = None) -> None:
+    """이항화된 트리에서 규칙을 카운팅. 희귀어(vocab 밖)는 unk_fn(단어)로 치환."""
     if isinstance(tree, str):
         return
     if tree.is_preterminal():
         word = tree.children[0]
-        token = word if word in vocab else UNK
+        if word in vocab:
+            token = word
+        else:
+            token = unk_fn(word)
+            if unk_tokens is not None:
+                unk_tokens.add(token)
         counts_lhs[tree.label] += 1
         counts_rule[(tree.label, (token,))] += 1
         return
@@ -135,27 +146,33 @@ def _collect_rules(tree: Tree, vocab: set, counts_lhs: Counter,
     counts_lhs[tree.label] += 1
     counts_rule[(tree.label, rhs)] += 1
     for c in tree.children:
-        _collect_rules(c, vocab, counts_lhs, counts_rule)
+        _collect_rules(c, vocab, counts_lhs, counts_rule, unk_fn, unk_tokens)
 
 
 class InducedGrammar:
     """유도된 PCFG + 어휘(vocab)를 묶는 컨테이너."""
 
-    def __init__(self, grammar: PCFG, vocab: set, start: str = TOP):
+    def __init__(self, grammar: PCFG, vocab: set, start: str = TOP,
+                 unk_fn: Callable[[str], str] = default_unk):
         self.grammar = grammar
         self.vocab = vocab
         self.start = start
+        self.unk_fn = unk_fn
 
 
-def induce_pcfg(trees: List[Tree], unk_threshold: int = 1) -> InducedGrammar:
+def induce_pcfg(trees: List[Tree], unk_threshold: int = 1,
+                preprocess_fn: Callable[[Tree], Optional[Tree]] = preprocess,
+                unk_fn: Callable[[str], str] = default_unk) -> InducedGrammar:
     """트리뱅크 트리들에서 CNF PCFG를 유도.
 
     unk_threshold: 이 빈도 이하(<=)인 단어를 UNK로 치환.
+    preprocess_fn: 트리 전처리(기본: Penn 규칙). 한국어는 `pcfg.korean`의 전처리.
+    unk_fn: 미등록어 → UNK 토큰(기본: 단일 `<UNK>`). 한국어는 품사별 UNK.
     """
     # 1) 전처리 + TOP 래핑
     processed: List[Tree] = []
     for t in trees:
-        pt = preprocess(t)
+        pt = preprocess_fn(t)
         if pt is not None:
             processed.append(add_top(pt))
 
@@ -166,25 +183,27 @@ def induce_pcfg(trees: List[Tree], unk_threshold: int = 1) -> InducedGrammar:
     # 3) 이항화 + 규칙 카운팅
     counts_lhs: Counter = Counter()
     counts_rule: Counter = Counter()
+    unk_tokens: set = set()
     for t in processed:
         bt = binarize(t)
-        _collect_rules(bt, vocab, counts_lhs, counts_rule)
+        _collect_rules(bt, vocab, counts_lhs, counts_rule, unk_fn, unk_tokens)
 
     # 4) 정규화 → PCFG
     g = PCFG(start=TOP)
     for (lhs, rhs), c in counts_rule.items():
         prob = c / counts_lhs[lhs]
-        is_lexical = len(rhs) == 1 and (rhs[0] in vocab or rhs[0] == UNK)
+        is_lexical = len(rhs) == 1 and (rhs[0] in vocab or rhs[0] in unk_tokens)
         # 단항 비단말(A→B, B가 비단말)과 어휘(A→w) 구분: 어휘는 vocab/UNK 토큰.
         g.add(lhs, rhs, prob, lexical=is_lexical)
-    return InducedGrammar(grammar=g, vocab=vocab, start=TOP)
+    return InducedGrammar(grammar=g, vocab=vocab, start=TOP, unk_fn=unk_fn)
 
 
 # ---------------------------------------------------------------------------
 # 파싱 (UNK 백오프 + 폴백) → 원본 n-항 트리 반환
 # ---------------------------------------------------------------------------
-def _map_unknowns(words: List[str], vocab: set) -> List[str]:
-    return [w if w in vocab else UNK for w in words]
+def _map_unknowns(words: List[str], vocab: set,
+                  unk_fn: Callable[[str], str] = default_unk) -> List[str]:
+    return [w if w in vocab else unk_fn(w) for w in words]
 
 
 def right_branching_fallback(words: List[str], label: str = "S",
@@ -206,7 +225,7 @@ def parse_sentence(words: List[str], induced: InducedGrammar,
     - 실패 시 우분지 폴백.
     - engine: "py"(참조 구현 pcfg.cky) | "cpp"(C++ 엔진 pcfg.cky_cpp, 결과 동일).
     """
-    mapped = _map_unknowns(words, induced.vocab)
+    mapped = _map_unknowns(words, induced.vocab, induced.unk_fn)
     if engine == "py":
         result = parse(mapped, induced.grammar)
     elif engine == "cpp":

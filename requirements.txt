@@ -3,3 +3,5 @@ pytest
 pybind11>=2.12
 setuptools
 matplotlib
+kiwipiepy
+ijson
