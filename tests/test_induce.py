@@ -180,3 +180,12 @@ def test_treebank_end_to_end_coverage_and_f1():
     prf = evaluate_corpus(pairs)
     # F1이 정상 범위에서 산출됨 (통과 기준: 산출 자체 + 비자명한 값)
     assert 0.0 < prf.f1 <= 1.0
+
+
+@pytest.mark.parametrize("h", [1, 2])
+def test_markovized_binarize_round_trip(h):
+    t = from_bracket("(VP (V hit) (NP (N ball)) (PP (P to) (NP (N me))) (NP (N hard)))")
+    b = binarize(t, h=h)
+    assert _max_arity(b) <= 2
+    assert all(lbl.count("-") <= h - 1 for lbl in _all_labels(b) if "|" in lbl)
+    assert unbinarize(b) == t

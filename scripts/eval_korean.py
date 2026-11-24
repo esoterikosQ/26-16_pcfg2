@@ -63,6 +63,7 @@ def main() -> None:
     ap.add_argument("--max-len", type=int, default=0, help="평가 문장 최대 형태소 수(0=제한 없음)")
     ap.add_argument("--strip-ftags", action="store_true", help="기능 표지를 지우고 학습")
     ap.add_argument("--mark-eojeol", action="store_true", help="어절 첫 형태소에 ▁ 표시(K4-1)")
+    ap.add_argument("--markov-h", type=int, default=0, help="이항화 수평 마르코프화 차수(0 = h=∞, K4-2)")
     ap.add_argument("--unk-threshold", type=int, default=1)
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--seed", type=int, default=0)
@@ -79,7 +80,8 @@ def main() -> None:
         train = [mark_eojeol_boundaries(t) for t in train]
     t_read = time.time() - t0
     t0 = time.time()
-    _IND = induce_pcfg(train, unk_threshold=args.unk_threshold, preprocess_fn=prep, unk_fn=unk_fn)
+    _IND = induce_pcfg(train, unk_threshold=args.unk_threshold, preprocess_fn=prep, unk_fn=unk_fn,
+                       markov_h=args.markov_h or None)
     t_induce = time.time() - t0
     g = _IND.grammar
     n_lex = sum(len(v) for v in g._lexical_by_word.values())
@@ -125,7 +127,7 @@ def main() -> None:
 
     summary = {
         "tag": args.tag, "split": args.split, "eval_sents": len(golds), "strip_ftags": args.strip_ftags,
-        "mark_eojeol": args.mark_eojeol,
+        "mark_eojeol": args.mark_eojeol, "markov_h": args.markov_h or "inf",
         "unk_threshold": args.unk_threshold, "fallbacks": fallbacks,
         "parseval_labeled": prf(full), "parseval_no_ftag": prf(noft), "parseval_unlabeled": prf(unl),
         "parse_wall_sec": round(wall, 1), "workers": args.workers,

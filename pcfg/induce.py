@@ -71,16 +71,19 @@ def strip_top(tree: Tree) -> Tree:
 # ---------------------------------------------------------------------------
 # CNF 정/역변환
 # ---------------------------------------------------------------------------
-def binarize(tree: Tree, marker: str = MARKER) -> Tree:
+def binarize(tree: Tree, marker: str = MARKER, h: Optional[int] = None) -> Tree:
     """n-항(>2) 규칙을 우분지 이항화. 인공 중간 노드에 표식(marker)을 남긴다.
 
     중간 노드 라벨은 (부모, 남은 꼬리 라벨열)로만 결정되는 비중첩 방식
     (Klein & Manning h=∞ 무손실 이항화). 동일 부모·동일 꼬리는 라벨을 공유해
     규칙이 과도하게 희소해지는 것을 막는다.
+
+    h: 수평 마르코프화 차수(Klein & Manning 2003). 중간 라벨에 남은 꼬리 중 앞 h개만 남긴다.
+       None이면 h=∞(무손실). 역변환은 표식만 보므로 h와 무관하다.
     """
     if tree.is_preterminal():
         return Tree(tree.label, [tree.children[0]])
-    children = [binarize(c, marker) for c in tree.children]
+    children = [binarize(c, marker, h) for c in tree.children]
     if len(children) <= 2:
         return Tree(tree.label, children)
 
@@ -89,7 +92,8 @@ def binarize(tree: Tree, marker: str = MARKER) -> Tree:
     n = len(children)
 
     def inter_label(s: int) -> str:  # children[s:] 를 덮는 중간 노드 라벨
-        return f"{parent}{marker}<{'-'.join(labels[s:])}>"
+        tail = labels[s:] if h is None else labels[s:s + h]
+        return f"{parent}{marker}<{'-'.join(tail)}>"
 
     # 가장 안쪽: 마지막 두 자식
     inter = Tree(inter_label(n - 2), [children[n - 2], children[n - 1]])
@@ -162,12 +166,14 @@ class InducedGrammar:
 
 def induce_pcfg(trees: List[Tree], unk_threshold: int = 1,
                 preprocess_fn: Callable[[Tree], Optional[Tree]] = preprocess,
-                unk_fn: Callable[[str], str] = default_unk) -> InducedGrammar:
+                unk_fn: Callable[[str], str] = default_unk,
+                markov_h: Optional[int] = None) -> InducedGrammar:
     """트리뱅크 트리들에서 CNF PCFG를 유도.
 
     unk_threshold: 이 빈도 이하(<=)인 단어를 UNK로 치환.
     preprocess_fn: 트리 전처리(기본: Penn 규칙). 한국어는 `pcfg.korean`의 전처리.
     unk_fn: 미등록어 → UNK 토큰(기본: 단일 `<UNK>`). 한국어는 품사별 UNK.
+    markov_h: 이항화 수평 마르코프화 차수(None = h=∞).
     """
     # 1) 전처리 + TOP 래핑
     processed: List[Tree] = []
@@ -185,7 +191,7 @@ def induce_pcfg(trees: List[Tree], unk_threshold: int = 1,
     counts_rule: Counter = Counter()
     unk_tokens: set = set()
     for t in processed:
-        bt = binarize(t)
+        bt = binarize(t, h=markov_h)
         _collect_rules(bt, vocab, counts_lhs, counts_rule, unk_fn, unk_tokens)
 
     # 4) 정규화 → PCFG
