@@ -113,3 +113,69 @@ python setup.py build_ext --inplace && pytest -q
 
 - 코드 검토: 규칙 로그확률은 Python `math.log`로 계산해 전달, `-ffp-contract=off`, 셀은 삽입 순서 보존 희소 벡터 + 라벨 정렬 인덱스, 셀 계산 중에만 라벨 수 크기 임시 배열, 트리 복원은 반복형(재귀 깊이 문제 없음). 문제 없음. → **K1 완료.**
 - **규칙 위반 기록**: 빌드 출력을 `/dev/null` 대신 `/tmp/null`로 잘못 리다이렉트해 itcerdo 지정 디렉토리 밖에 파일(18바이트)을 만듦. 확인 즉시 `rm -f /tmp/null`로 삭제.
+
+### 11:00–11:10 · 모두의 말뭉치 구문 분석(DP) 반입·스키마 확인 [gsm, itcerdo]
+
+- 작업: 사용자가 지정한 외장 디스크 `/Volumes/T31/NIKL`의 `DP_json.zip`(2020 v2.0), `DP2024.zip`, `DP2025.zip`을 itcerdo `data/raw/`로 전송·압축 해제(`DP_json.zip` 내부 디렉토리명이 CP949라 `unzip -O cp949`). 스키마·라벨·지배소 방향·투사성 확인.
+
+```bash
+# [gsm] /Volumes/T31/NIKL
+rsync -a DP_json.zip DP2024.zip DP2025.zip itcerdo:projects/phdq_pcfg2/data/raw/    # 8초, 바이트 수 일치
+# [itcerdo] data/
+unzip -O cp949 raw/DP_json.zip → NIKL_DP_v2.0/ ; unzip raw/DP2024.zip ; unzip raw/DP2025.zip -d NIKL_DP_2025_v1.0
+```
+
+- 결과: `NIKL_DP_v2.0`(NX 신문 2019·SX 구어 2020, 1.7GB), `NIKL_DP_2024_v1.0`(1.1GB), `NIKL_DP_2025_v1.0`(128MB). itcerdo 디스크 여유 68GB.
+  - 문장 = `word`(어절 form·begin·end) + `DP`(word_id·head·label·dependent). **형태소 분석 없음.**
+  - 라벨 = 세종 구구조 표지(`NP`, `NP_SBJ`, `NP_OBJ`, `NP_AJT`, `VP`, `VP_MOD`, `VNP`, `AP`, `DP`, `IP` …, 28–37종).
+  - 표본(2025 NX 13,907 · 2025 SX 16,439 · 2020 NX 20,000문장): 루트 1개 100%, **지배소가 오른쪽 100%(핵어말)**, 비투사 문장 0% / 0% / 0.51%.
+- 결정: 의존 구조지만 세종식 구 표지·핵어말·투사적이므로 **결정적으로 구구조로 변환해 K2 트리뱅크로 쓴다**(세종 구문분석 말뭉치는 확보 시 비교용). `CLAUDE.md`·`plan.md` 갱신.
+
+### 11:10–11:22 · K2 변환기·트리뱅크 구축 [gsm, itcerdo]
+
+- 작업: `pcfg/korean.py` — 지배소가 자기 라벨로 투사하며 가까운 의존소부터 묶는 이진 변환, Kiwi 토큰을 시작 위치로 어절에 배정, 말단 `형태/품사`·전종단 `#품사`(Kiwi `NP` 대명사와 구 표지 `NP` 충돌 방지)·괄호 이스케이프, 품사별 UNK `<UNK/NNG>`. `pcfg/induce.py`에 `preprocess_fn`·`unk_fn` 훅(기본값은 영어 동작 그대로). 커밋 `c404952`.
+
+```bash
+pytest -q                                              # 58 passed
+python -m scripts.build_dp_treebank --limit 20000      # 시험: 98.99% 변환
+tmux new-session -d -s pcfg2-k2 "python -m scripts.build_dp_treebank > outputs/k2/build.log 2>&1 < /dev/null"
+```
+
+- 결과 (44초): 655,181문장 → **651,934문장 변환(99.50%)**. 제외: Kiwi 형태소 배정 실패 2,632, 비투사 604, 루트 수 오류 11. dev·test 중 train과 같은 문장 제거 2,529 / 3,686.
+
+| 분할 | 문장 | 형태소 | 형태소/문장 |
+|---|---:|---:|---:|
+| train | 593,990 | 10,223,434 | 17.2 |
+| dev | 23,671 | 518,124 | 21.9 |
+| test | 28,058 | 560,644 | 20.0 |
+
+| 출처 | 문장 | 변환 |
+|---|---:|---:|
+| 2020 신문 NXDP1902103231 | 150,082 | 148,027 |
+| 2020 구어 SXDP2002103180 | 221,489 | 221,416 |
+| 2024 신문 NXDP2402503041 | 67,934 | 67,177 |
+| 2024 구어 SXDP2402503041 | 185,330 | 184,984 |
+| 2025 신문 NXDP2502512313 | 13,907 | 13,893 |
+| 2025 구어 SXDP2502512312 | 16,439 | 16,437 |
+
+→ **K2 완료.**
+
+### 11:22–11:35 · K3 한국어 기준선 [itcerdo]
+
+- 작업: 전체 train으로 유도(품사별 UNK, 빈도 1 이하 UNK) → dev 전체 파싱(C++ 엔진, 12프로세스) → PARSEVAL(루트·전종단 제외). 기능 표지 유지/제거 학습 비교. 먼저 train 10만·dev 500 시험 실행.
+
+```bash
+python -m scripts.eval_korean --max-train 100000 --dev-n 500 --workers 8 --tag try100k
+tmux new-session -d -s pcfg2-k3 "python -m scripts.eval_korean --dev-n 0 --workers 12 --tag base_full; python -m scripts.eval_korean --dev-n 0 --workers 12 --strip-ftags --tag noft_full"
+```
+
+- 결과 (dev 23,671문장, 폴백 1문장):
+
+| 설정 | 비단말 | 이항 규칙 | F1 라벨 | F1 기능표지 제거 | F1 무라벨 | 파싱 시간 |
+|---|---:|---:|---:|---:|---:|---:|
+| 시험: train 10만, dev 500 | 16,040 | 32,454 | 0.557 | 0.612 | 0.623 | 0.5 s |
+| **base_full** (기능 표지 유지) | 50,286 | 97,971 | **0.575** (P .618 R .537) | **0.630** | **0.644** | 25.5 s |
+| noft_full (기능 표지 제거 학습) | 41,935 | 79,900 | — | 0.560 | 0.573 | 3.3 s |
+
+  - 문장당 파싱 시간(base_full): 형태소 ≤20 0.9 ms, 21–40 10 ms, 41–60 43 ms, 61–80 109 ms, 80 초과 262 ms(최대 1.3 s).
+  - 해석: (1) **기능 표지를 지우고 학습하면 나빠짐**(같은 평가 기준 0.630 → 0.560) → 기능 표지는 주어·목적어·부사어 구분이 상태 주석 역할을 하므로 유지. (2) 재현율이 정밀도보다 8점 낮음 → 파서 입력에 어절 경계가 없어 여러 어절의 형태소를 한 어절 노드로 합치는 경향으로 추정. HNC 후보는 띄어쓰기가 정해져 있으므로 어절 경계를 입력에 주는 실험(K4-1)을 진행.

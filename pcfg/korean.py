@@ -92,9 +92,11 @@ EOJEOL_MARK = "▁"
 
 
 def mark_eojeol_boundaries(tree: Tree) -> Tree:
-    """어절 첫 형태소의 말단 앞에 ``▁``를 붙인 사본.
+    """어절 첫 형태소의 전종단·말단에 ``▁``를 붙인 사본 (``#▁NNG`` → ``▁사과/NNG``).
 
     변환 트리에서 어절 노드 = 자식이 모두 전종단인 노드다(투사 노드는 구 자식을 가짐).
+    말단에만 붙이면 어휘 확률만 갈라지고 문법은 경계를 보지 못하므로(2026-11-24 실측) 전종단에도
+    붙여, 어절 노드 규칙이 "어절 첫 형태소로 시작"을 학습하게 한다.
     HNC 후보는 띄어쓰기가 정해져 있으므로(형태소의 ``space_before``) 파서 입력에 어절 경계를
     주는 것은 정당하다.
     """
@@ -103,7 +105,8 @@ def mark_eojeol_boundaries(tree: Tree) -> Tree:
     kids = [mark_eojeol_boundaries(c) for c in tree.children]
     if all(isinstance(c, Tree) and c.is_preterminal() for c in tree.children):
         first = kids[0]
-        kids[0] = Tree(first.label, [EOJEOL_MARK + first.children[0]])
+        label = POS_PREFIX + EOJEOL_MARK + first.label[len(POS_PREFIX):]
+        kids[0] = Tree(label, [EOJEOL_MARK + first.children[0]])
     return Tree(tree.label, kids)
 
 

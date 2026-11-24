@@ -100,4 +100,5 @@ def test_mark_eojeol_boundaries():
     t = dp_to_tree([3, 3, 0], ["NP_SBJ", "NP_OBJ", "VP"], [M_SUBJ, M_OBJ, M_PRED])
     m = mark_eojeol_boundaries(t)
     assert m.leaves() == ["▁나/NP", "는/JX", "▁사과/NNG", "를/JKO", "▁먹/VV", "었/EP", "다/EF"]
+    assert to_bracket(m).startswith("(VP (NP_SBJ (#▁NP ▁나/NP) (#JX 는/JX))")
     assert unk_by_tag_eojeol("▁사과/NNG") == "<UNK▁/NNG>" and unk_by_tag_eojeol("를/JKO") == "<UNK/JKO>"
