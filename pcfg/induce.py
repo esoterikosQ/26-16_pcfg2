@@ -71,25 +71,41 @@ def strip_top(tree: Tree) -> Tree:
 # ---------------------------------------------------------------------------
 # CNF 정/역변환
 # ---------------------------------------------------------------------------
-def binarize(tree: Tree, marker: str = MARKER, h: Optional[int] = None) -> Tree:
-    """n-항(>2) 규칙을 우분지 이항화. 인공 중간 노드에 표식(marker)을 남긴다.
+def binarize(tree: Tree, marker: str = MARKER, h: Optional[int] = None,
+             direction: str = "right") -> Tree:
+    """n-항(>2) 규칙을 이항화. 인공 중간 노드에 표식(marker)을 남긴다.
 
     중간 노드 라벨은 (부모, 남은 꼬리 라벨열)로만 결정되는 비중첩 방식
     (Klein & Manning h=∞ 무손실 이항화). 동일 부모·동일 꼬리는 라벨을 공유해
     규칙이 과도하게 희소해지는 것을 막는다.
 
-    h: 수평 마르코프화 차수(Klein & Manning 2003). 중간 라벨에 남은 꼬리 중 앞 h개만 남긴다.
-       None이면 h=∞(무손실). 역변환은 표식만 보므로 h와 무관하다.
+    h: 수평 마르코프화 차수(Klein & Manning 2003). 중간 라벨에 남은 꼬리 중 h개만 남긴다.
+       None이면 h=∞(무손실). 역변환은 표식만 보므로 h·방향과 무관하다.
+    direction: ``right``(우분지, 중간 노드가 오른쪽 꼬리 children[s:]를 덮고 라벨은 꼬리의 앞 h개)
+       | ``left``(좌분지, 중간 노드가 왼쪽 머리 children[:e]를 덮고 라벨은 머리의 뒤 h개).
+       핵어말 언어에서 좌분지는 마지막 자식(조사·어미)을 부모 규칙에 직접 붙인다.
     """
+    if direction not in ("right", "left"):
+        raise ValueError(f"direction must be 'right' or 'left': {direction}")
     if tree.is_preterminal():
         return Tree(tree.label, [tree.children[0]])
-    children = [binarize(c, marker, h) for c in tree.children]
+    children = [binarize(c, marker, h, direction) for c in tree.children]
     if len(children) <= 2:
         return Tree(tree.label, children)
 
     parent = tree.label
     labels = [c.label for c in children]
     n = len(children)
+
+    if direction == "left":
+        def head_label(e: int) -> str:  # children[:e] 를 덮는 중간 노드 라벨
+            head = labels[:e] if h is None else labels[max(0, e - h):e]
+            return f"{parent}{marker}<{'-'.join(head)}>"
+
+        inter = Tree(head_label(2), [children[0], children[1]])
+        for e in range(3, n):
+            inter = Tree(head_label(e), [inter, children[e - 1]])
+        return Tree(parent, [inter, children[n - 1]])
 
     def inter_label(s: int) -> str:  # children[s:] 를 덮는 중간 노드 라벨
         tail = labels[s:] if h is None else labels[s:s + h]
@@ -167,13 +183,15 @@ class InducedGrammar:
 def induce_pcfg(trees: List[Tree], unk_threshold: int = 1,
                 preprocess_fn: Callable[[Tree], Optional[Tree]] = preprocess,
                 unk_fn: Callable[[str], str] = default_unk,
-                markov_h: Optional[int] = None) -> InducedGrammar:
+                markov_h: Optional[int] = None,
+                binarize_dir: str = "right") -> InducedGrammar:
     """트리뱅크 트리들에서 CNF PCFG를 유도.
 
     unk_threshold: 이 빈도 이하(<=)인 단어를 UNK로 치환.
     preprocess_fn: 트리 전처리(기본: Penn 규칙). 한국어는 `pcfg.korean`의 전처리.
     unk_fn: 미등록어 → UNK 토큰(기본: 단일 `<UNK>`). 한국어는 품사별 UNK.
     markov_h: 이항화 수평 마르코프화 차수(None = h=∞).
+    binarize_dir: 이항화 방향 ``right``(기본) | ``left``.
     """
     # 1) 전처리 + TOP 래핑
     processed: List[Tree] = []
@@ -191,7 +209,7 @@ def induce_pcfg(trees: List[Tree], unk_threshold: int = 1,
     counts_rule: Counter = Counter()
     unk_tokens: set = set()
     for t in processed:
-        bt = binarize(t, h=markov_h)
+        bt = binarize(t, h=markov_h, direction=binarize_dir)
         _collect_rules(bt, vocab, counts_lhs, counts_rule, unk_fn, unk_tokens)
 
     # 4) 정규화 → PCFG

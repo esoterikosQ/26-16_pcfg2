@@ -22,7 +22,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterator, List, Optional, Sequence, Tuple
+from typing import Callable, Iterator, List, Optional, Sequence, Tuple
 
 from .tree import Tree
 
@@ -91,17 +91,35 @@ def relabel_tree(tree: Tree, relabel) -> Tree:
 PARENT_SEP = "^"
 
 
-def annotate_parent(tree: Tree, parent: Optional[str] = None) -> Tree:
-    """구 노드 라벨에 부모 라벨을 붙인다(``NP_SBJ`` → ``NP_SBJ^VP``). 전종단과 루트는 그대로."""
+def annotate_parent(tree: Tree, parent: Optional[str] = None, grand: Optional[str] = None,
+                    v: int = 2, tags: bool = False) -> Tree:
+    """구 노드 라벨에 조상 라벨을 붙인다. 루트는 그대로.
+
+    v=2: ``NP_SBJ`` → ``NP_SBJ^VP``, v=3(조부모 주석): ``NP_SBJ^VP^VP``.
+    tags=True면 전종단에도 부모 라벨을 붙인다(``#JKS`` → ``#JKS^NP_SBJ``, Klein & Manning의 TAG-PA).
+    """
     if tree.is_preterminal():
+        if tags and parent is not None:
+            return Tree(f"{tree.label}{PARENT_SEP}{parent}", [tree.children[0]])
         return Tree(tree.label, [tree.children[0]])
-    label = tree.label if parent is None else f"{tree.label}{PARENT_SEP}{parent}"
-    return Tree(label, [annotate_parent(c, tree.label) for c in tree.children])
+    label = tree.label
+    if parent is not None:
+        label += PARENT_SEP + parent
+        if v >= 3 and grand is not None:
+            label += PARENT_SEP + grand
+    return Tree(label, [annotate_parent(c, tree.label, parent, v, tags) for c in tree.children])
 
 
 def preprocess_parent(tree: Tree) -> Tree:
     """기능 표지 유지 + 부모 주석."""
     return annotate_parent(preprocess_keep(tree))
+
+
+def make_preprocess_parent(v: int = 2, tags: bool = False) -> Callable[[Tree], Tree]:
+    """기능 표지 유지 + 조상 주석(v, 전종단 주석 여부)."""
+    def prep(tree: Tree) -> Tree:
+        return annotate_parent(preprocess_keep(tree), v=v, tags=tags)
+    return prep
 
 
 def strip_parent(label: str) -> str:

@@ -189,3 +189,14 @@ def test_markovized_binarize_round_trip(h):
     assert _max_arity(b) <= 2
     assert all(lbl.count("-") <= h - 1 for lbl in _all_labels(b) if "|" in lbl)
     assert unbinarize(b) == t
+
+
+@pytest.mark.parametrize("h", [None, 1, 2])
+def test_left_binarize_round_trip(h):
+    t = from_bracket("(VP (V hit) (NP (N ball)) (PP (P to) (NP (N me))) (NP (N hard)))")
+    b = binarize(t, h=h, direction="left")
+    assert _max_arity(b) <= 2
+    assert b.children[1].label == "NP" and "|" in b.children[0].label  # 마지막 자식이 부모에 직접 붙음
+    if h is not None:
+        assert all(lbl.count("-") <= h - 1 for lbl in _all_labels(b) if "|" in lbl)
+    assert unbinarize(b) == t

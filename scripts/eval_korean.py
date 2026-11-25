@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from pcfg.eval import evaluate_corpus  # noqa: E402
 from pcfg.induce import induce_pcfg, parse_sentence  # noqa: E402
 from pcfg.korean import (  # noqa: E402
-    mark_eojeol_boundaries, preprocess_keep, preprocess_parent, preprocess_strip, relabel_tree,
+    make_preprocess_parent, mark_eojeol_boundaries, preprocess_keep, preprocess_strip, relabel_tree,
     strip_function_tag, strip_parent, unk_by_tag, unk_by_tag_eojeol,
 )
 from pcfg.tree import from_bracket, to_bracket  # noqa: E402
@@ -65,6 +65,9 @@ def main() -> None:
     ap.add_argument("--mark-eojeol", action="store_true", help="어절 첫 형태소에 ▁ 표시(K4-1)")
     ap.add_argument("--markov-h", type=int, default=0, help="이항화 수평 마르코프화 차수(0 = h=∞, K4-2)")
     ap.add_argument("--parent", action="store_true", help="부모 주석 v=2 (K4-3). 평가 전에 떼어 낸다")
+    ap.add_argument("--grandparent", action="store_true", help="조부모 주석 v=3 (--parent 포함, K4-5)")
+    ap.add_argument("--tag-parent", action="store_true", help="전종단에도 부모 주석 (--parent 포함, K4-6)")
+    ap.add_argument("--binarize", choices=["right", "left"], default="right", help="이항화 방향 (K4-4)")
     ap.add_argument("--unk-threshold", type=int, default=1)
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--seed", type=int, default=0)
@@ -72,9 +75,15 @@ def main() -> None:
     args = ap.parse_args()
     out = Path("outputs/k3") / args.tag
     out.mkdir(parents=True, exist_ok=True)
+    args.parent = args.parent or args.grandparent or args.tag_parent
     if args.parent and args.strip_ftags:
         ap.error("--parent 와 --strip-ftags 는 함께 쓰지 않는다")
-    prep = preprocess_strip if args.strip_ftags else (preprocess_parent if args.parent else preprocess_keep)
+    if args.strip_ftags:
+        prep = preprocess_strip
+    elif args.parent:
+        prep = make_preprocess_parent(v=3 if args.grandparent else 2, tags=args.tag_parent)
+    else:
+        prep = preprocess_keep
 
     unk_fn = unk_by_tag_eojeol if args.mark_eojeol else unk_by_tag
     t0 = time.time()
@@ -84,7 +93,7 @@ def main() -> None:
     t_read = time.time() - t0
     t0 = time.time()
     _IND = induce_pcfg(train, unk_threshold=args.unk_threshold, preprocess_fn=prep, unk_fn=unk_fn,
-                       markov_h=args.markov_h or None)
+                       markov_h=args.markov_h or None, binarize_dir=args.binarize)
     t_induce = time.time() - t0
     g = _IND.grammar
     n_lex = sum(len(v) for v in g._lexical_by_word.values())
@@ -132,6 +141,7 @@ def main() -> None:
     summary = {
         "tag": args.tag, "split": args.split, "eval_sents": len(golds), "strip_ftags": args.strip_ftags,
         "mark_eojeol": args.mark_eojeol, "markov_h": args.markov_h or "inf", "parent": args.parent,
+        "grandparent": args.grandparent, "tag_parent": args.tag_parent, "binarize": args.binarize,
         "unk_threshold": args.unk_threshold, "fallbacks": fallbacks,
         "parseval_labeled": prf(full), "parseval_no_ftag": prf(noft), "parseval_unlabeled": prf(unl),
         "parse_wall_sec": round(wall, 1), "workers": args.workers,

@@ -110,3 +110,14 @@ def test_parent_annotation():
     a = annotate_parent(t)
     assert to_bracket(a).startswith("(VP (NP_SBJ^VP (#NP 나/NP) (#JX 는/JX)) (VP^VP (NP_OBJ^VP")
     assert relabel_tree(a, strip_parent) == t
+
+
+def test_grandparent_and_tag_annotation():
+    from pcfg.korean import annotate_parent, relabel_tree, strip_parent
+    t = dp_to_tree([3, 3, 0], ["NP_SBJ", "NP_OBJ", "VP"], [M_SUBJ, M_OBJ, M_PRED])
+    a3 = annotate_parent(t, v=3)
+    assert to_bracket(a3).startswith("(VP (NP_SBJ^VP (#NP 나/NP) (#JX 는/JX)) (VP^VP (NP_OBJ^VP^VP")
+    assert relabel_tree(a3, strip_parent) == t
+    at = annotate_parent(t, tags=True)
+    assert to_bracket(at).startswith("(VP (NP_SBJ^VP (#NP^NP_SBJ 나/NP) (#JX^NP_SBJ 는/JX))")
+    assert relabel_tree(at, strip_parent) == t
