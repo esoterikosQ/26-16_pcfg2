@@ -10,8 +10,11 @@ M_PRED = [("먹", "VV"), ("었", "EP"), ("다", "EF")]
 
 
 def _scorer():
+    # 주어 조사를 달리한 트리를 하나 섞어 문법이 결정적(log P = 0)이 되지 않게 한다(v=3 주석에서도).
     trees = [dp_to_tree([3, 3, 0], ["NP_SBJ", "NP_OBJ", "VP"],
                         [M_SUBJ, [(n, "NNG"), ("을", "JKO")], M_PRED]) for n in ("사과", "빵", "밥")]
+    trees.append(dp_to_tree([3, 3, 0], ["NP_SBJ", "NP_OBJ", "VP"],
+                            [[("내", "NP"), ("가", "JKS")], [("국", "NNG"), ("을", "JKO")], M_PRED]))
     return PCFGScorer(induce_best(trees))
 
 
