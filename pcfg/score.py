@@ -25,7 +25,7 @@ from typing import List, Sequence
 from .cky_cpp import parse as parse_cpp
 from .induce import MARKER, InducedGrammar, induce_pcfg
 from .korean import (
-    EOJEOL_MARK, mark_eojeol_boundaries, preprocess_parent, terminal, unk_by_tag_eojeol,
+    EOJEOL_MARK, make_preprocess_parent, mark_eojeol_boundaries, terminal, unk_by_tag_eojeol,
 )
 from .tree import Tree
 
@@ -33,7 +33,7 @@ NEG_INF = float("-inf")
 FRAG_LOGPENALTY = math.log(1e-4)   # 파스 실패 시 조각 하나당 벌점
 EMPTY_CELL_LOGPROB = math.log(1e-12)  # 어휘 규칙이 전혀 없는 형태소(이론상 없음)의 하한
 
-BEST_CONFIG = {"mark_eojeol": True, "markov_h": 1, "parent": True, "unk_threshold": 1}
+BEST_CONFIG = {"mark_eojeol": True, "markov_h": 1, "parent": True, "parent_v": 2, "unk_threshold": 1}
 
 
 @dataclass
@@ -44,29 +44,33 @@ class ScoreResult:
     n_fragments: int
 
 
-def induce_best(trees: Sequence[Tree], unk_threshold: int = 1) -> InducedGrammar:
-    """K4 최선 설정으로 PCFG 유도. ``trees``는 ``data/treebank``의 변환 트리(표시 전)."""
+def induce_best(trees: Sequence[Tree], unk_threshold: int = 1, parent_v: int = 2) -> InducedGrammar:
+    """K4 최선 설정으로 PCFG 유도. ``trees``는 ``data/treebank``의 변환 트리(표시 전).
+
+    parent_v: 조상 주석 차수(2 = 부모, 3 = 조부모까지; K4-5).
+    """
     marked = [mark_eojeol_boundaries(t) for t in trees]
-    return induce_pcfg(marked, unk_threshold=unk_threshold, preprocess_fn=preprocess_parent,
+    return induce_pcfg(marked, unk_threshold=unk_threshold, preprocess_fn=make_preprocess_parent(v=parent_v),
                        unk_fn=unk_by_tag_eojeol, markov_h=BEST_CONFIG["markov_h"])
 
 
 class PCFGScorer:
-    def __init__(self, induced: InducedGrammar, frag_logpenalty: float = FRAG_LOGPENALTY):
+    def __init__(self, induced: InducedGrammar, frag_logpenalty: float = FRAG_LOGPENALTY, config=None):
         self.ind = induced
         self.frag_logpenalty = frag_logpenalty
+        self.config = dict(config or BEST_CONFIG)
         lex = induced.grammar._lexical_by_word
         self._unk_tokens = {w for w in lex if w.startswith("<UNK")}
 
     # --- 직렬화 -------------------------------------------------------------
     def dumps(self) -> bytes:
         return pickle.dumps({"induced": self.ind, "frag_logpenalty": self.frag_logpenalty,
-                             "config": BEST_CONFIG}, protocol=pickle.HIGHEST_PROTOCOL)
+                             "config": self.config}, protocol=pickle.HIGHEST_PROTOCOL)
 
     @classmethod
     def loads(cls, data: bytes) -> "PCFGScorer":
         d = pickle.loads(data)
-        return cls(d["induced"], d["frag_logpenalty"])
+        return cls(d["induced"], d["frag_logpenalty"], d.get("config"))
 
     def save(self, path) -> None:
         with open(path, "wb") as f:
