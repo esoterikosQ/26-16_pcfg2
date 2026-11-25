@@ -284,7 +284,7 @@ $B --parent --binarize left --tag eojeol_h1_v2_left; $B --grandparent --tag eoje
 
 ### 15:55–16:30 · K4-5 v=3 채점기: 판별력·HNC 재채점 비교 → 최선 설정을 v=3으로 [gsm, itcerdo]
 
-- 작업: `induce_best(parent_v=)`, `PCFGScorer`가 설정을 모델 파일에 저장, `build_scorer --parent-v`. 커밋 `…`. v=3 채점기 생성 후 K5와 같은 판별력 점검, 그리고 `phdq_prob`의 HNC n-best(Kor-Native dev, 보간 LM, 가설 21k개)에서 PCFG 점수만 v=3으로 바꿔 재채점(`rescore.py --repcfg --pcfg-model`).
+- 작업: `induce_best(parent_v=)`, `PCFGScorer`가 설정을 모델 파일에 저장, `build_scorer --parent-v`. 커밋 `6f0663a`(설정 저장은 `0336fec`). v=3 채점기 생성 후 K5와 같은 판별력 점검, 그리고 `phdq_prob`의 HNC n-best(Kor-Native dev, 보간 LM, 가설 21k개)에서 PCFG 점수만 v=3으로 바꿔 재채점(`rescore.py --repcfg --pcfg-model`).
 
 ```bash
 python -m scripts.build_scorer --parent-v 3 --out data/models/pcfg_v3.pkl     # 유도 109 s, 23 MB
