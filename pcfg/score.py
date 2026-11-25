@@ -33,7 +33,7 @@ NEG_INF = float("-inf")
 FRAG_LOGPENALTY = math.log(1e-4)   # 파스 실패 시 조각 하나당 벌점
 EMPTY_CELL_LOGPROB = math.log(1e-12)  # 어휘 규칙이 전혀 없는 형태소(이론상 없음)의 하한
 
-BEST_CONFIG = {"mark_eojeol": True, "markov_h": 1, "parent": True, "parent_v": 2, "unk_threshold": 1}
+BEST_CONFIG = {"mark_eojeol": True, "markov_h": 1, "parent": True, "parent_v": 3, "unk_threshold": 1}
 
 
 @dataclass
@@ -44,10 +44,10 @@ class ScoreResult:
     n_fragments: int
 
 
-def induce_best(trees: Sequence[Tree], unk_threshold: int = 1, parent_v: int = 2) -> InducedGrammar:
+def induce_best(trees: Sequence[Tree], unk_threshold: int = 1, parent_v: int = BEST_CONFIG["parent_v"]) -> InducedGrammar:
     """K4 최선 설정으로 PCFG 유도. ``trees``는 ``data/treebank``의 변환 트리(표시 전).
 
-    parent_v: 조상 주석 차수(2 = 부모, 3 = 조부모까지; K4-5).
+    parent_v: 조상 주석 차수(2 = 부모, 3 = 조부모까지; K4-5에서 3 채택).
     """
     marked = [mark_eojeol_boundaries(t) for t in trees]
     return induce_pcfg(marked, unk_threshold=unk_threshold, preprocess_fn=make_preprocess_parent(v=parent_v),

@@ -1,7 +1,7 @@
 """K5 채점기 구축: 전체 train 트리로 최선 설정 PCFG를 유도해 저장.
 
     python -m scripts.build_scorer        # → data/models/pcfg_best.pkl (git 제외: 말뭉치 파생물)
-    python -m scripts.build_scorer --parent-v 3 --out data/models/pcfg_v3.pkl    # 조부모 주석(K4-5)
+    python -m scripts.build_scorer --parent-v 2 --out data/models/pcfg_v2.pkl    # K5 당시 설정(부모 주석만)
 """
 
 from __future__ import annotations
