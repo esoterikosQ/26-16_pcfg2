@@ -120,4 +120,7 @@ def test_grandparent_and_tag_annotation():
     assert relabel_tree(a3, strip_parent) == t
     at = annotate_parent(t, tags=True)
     assert to_bracket(at).startswith("(VP (NP_SBJ^VP (#NP^NP_SBJ 나/NP) (#JX^NP_SBJ 는/JX))")
-    assert relabel_tree(at, strip_parent) == t
+    # 평가용 relabel은 구 노드만 바꾼다(전종단 주석은 남지만 PARSEVAL은 전종단을 제외).
+    st = relabel_tree(at, strip_parent)
+    assert to_bracket(st).startswith("(VP (NP_SBJ (#NP^NP_SBJ 나/NP) (#JX^NP_SBJ 는/JX)) (VP (NP_OBJ")
+    assert st.leaves() == t.leaves()
