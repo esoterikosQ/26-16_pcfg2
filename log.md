@@ -301,3 +301,9 @@ python -m scripts.eval_scorer --model data/models/pcfg_v3.pkl --n 3000 --workers
 
   - n-best 가설 21k개 v=3 재채점 47.5 s(12프로세스), 파스 성공 98.8%.
 - 판단: v=3이 파서 품질(+1.7점)과 HNC 기여(+0.3 / 새 문장 +0.6) 모두에서 같거나 낫고, 채점 비용은 HNC 재채점에서 감당 가능 → **최선 설정을 v=3으로 갱신**(`BEST_CONFIG["parent_v"] = 3`). itcerdo 모델 파일: 이전 v=2 채점기는 `data/models/pcfg_v2.pkl`로 보존, `pcfg_best.pkl` = v=3.
+
+### 16:17–16:35 · 파일 정리: 기록은 T31로, 압축 해제본·캐시 삭제 [gsm, itcerdo]
+
+- 사용자 승인 분류에 따라: `outputs/`(K1 속도표, K2 로그, K3·K4 실험별 예측 트리 118 MB, K5·K5v3 로그) 34개를 SHA-256 목록과 함께 `/Volumes/T31/phdq_prob/phdq_pcfg2/outputs/`로 옮기고 **전부 일치** 확인 후 삭제.
+- 삭제: DP 압축 해제본 `data/NIKL_DP_{v2.0,2024_v1.0,2025_v1.0}`(2.9 GB; zip은 `data/raw/`에 남김 — 다시 만들 때 `CLAUDE.md`의 unzip 명령), `data/models/pcfg_v3.pkl`(`pcfg_best.pkl`과 바이트 동일 — `cmp` 확인), pip·pytest 캐시.
+- 결과: phdq_pcfg2 4.1 GB → 0.9 GB, 테스트 71 passed. 남은 것: `data/raw`(zip), `data/treebank`, `data/models/{pcfg_best(v=3), pcfg_v2}.pkl`.

@@ -22,8 +22,9 @@
 - **gsm(로컬)**: 코드·문서 편집, git commit/push, `log.md` 기록만 한다. **gsm에서 빌드·테스트·데이터 처리를 하지 않는다.**
 - **itcerdo**: `~/projects/phdq_pcfg2` 안에서만 작업한다(이 디렉토리 밖 접근 금지). 실행은 저장소 루트에서 `source .venv/bin/activate` 후 한다. sudo는 쓰지 않는다. 장시간 작업은 tmux에서 돌리고 끝나면 세션을 닫는다.
 - **코드 이동은 GitHub(`esoterikosQ/26-16_pcfg2`, public)로만**: gsm에서 push → itcerdo에서 `git pull`. itcerdo에서 추적 파일을 직접 고치지 않는다.
-- **데이터는 GitHub에 올리지 않는다**(공개 저장소, 국립국어원 재배포 금지). 원자료는 itcerdo `data/`(DP zip 원본은 `data/raw/`, 압축 해제본은 `data/NIKL_DP_*`), 변환 트리뱅크는 `data/treebank/`, 말뭉치 문장이 들어간 파싱 출력은 `outputs/`(모두 git 제외). 문서에는 수치만 적는다.
+- **데이터는 GitHub에 올리지 않는다**(공개 저장소, 국립국어원 재배포 금지). 원자료는 itcerdo `data/`(DP zip 원본은 `data/raw/`; 압축 해제본 `data/NIKL_DP_*`는 트리뱅크 변환 뒤 지웠으므로 다시 만들 때 `unzip -O cp949 raw/DP_json.zip`, `unzip raw/DP2024.zip`, `unzip raw/DP2025.zip -d NIKL_DP_2025_v1.0`), 변환 트리뱅크는 `data/treebank/`, 말뭉치 문장이 들어간 파싱 출력은 `outputs/`(모두 git 제외). 문서에는 수치만 적는다.
 - 캐시(pip, NLTK)는 저장소 안(`.cache/`, `nltk_data/`)에 고정한다.
+- 끝난 실험의 출력(`outputs/`)은 gsm 외장 디스크 `/Volumes/T31/phdq_prob/phdq_pcfg2/`로 옮긴다(목록·확인 방법은 `/Volumes/T31/phdq_prob/README.md`). 채점기 모델은 `data/models/pcfg_best.pkl`(v=3)·`pcfg_v2.pkl`.
 - **읽기 전용 참조 디렉토리**: `phdq_pcfg`, `phdq_noisy`, `phdq_bart2`는 절대 수정하지 않는다.
 
 ### 작업 기록 규칙
